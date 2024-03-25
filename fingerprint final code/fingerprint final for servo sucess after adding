@@ -1,0 +1,80 @@
+#include <Adafruit_Fingerprint.h>
+#include <Servo.h>
+
+#define SERVO_PIN       9 // Choose the pin connected to the servo
+#define ACCESS_DELAY    5000 // Keep lock unlocked for 3 seconds 
+
+SoftwareSerial mySerial(2, 3);
+Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
+Servo myServo;
+
+bool doorLocked = true; // Flag to track door lock status
+int consecutiveErrors = 0; // Counter for consecutive errors
+
+void setup() {
+  Serial.begin(9600); // Initialize serial communication for debugging
+  finger.begin(57600);
+  delay(5); // Short delay after initializing fingerprint sensor
+  if (finger.verifyPassword()) {
+    Serial.println("Fingerprint sensor verified");
+  } else {
+    Serial.println("Fingerprint sensor verification failed. Check wiring.");
+    while (true) { delay(1); } // Loop indefinitely if verification fails
+  }
+  
+  myServo.attach(SERVO_PIN);
+  myServo.write(90); // Move the servo to the initial position (90 degrees)
+  delay(1000); // Allow time for servo to reach initial position
+  Serial.println("Setup complete.");
+}
+
+void loop() {
+  int fingerprintID = getFingerPrint();
+  if (fingerprintID != -1) {
+    Serial.println("Fingerprint matched. Unlocking door.");
+    unlockDoor();
+    delay(ACCESS_DELAY);
+    lockDoor();
+    Serial.println("Door locked.");
+    // Update door lock status
+    doorLocked = true;
+  }
+  delay(50); // Add some delay before next scan.
+}
+
+int getFingerPrint() {
+  int p = finger.getImage();
+  if (p != FINGERPRINT_OK) {
+    consecutiveErrors++;
+    if (consecutiveErrors >= 5) { // Print error message if consecutive errors exceed threshold
+      Serial.println("place finger");
+      consecutiveErrors = 0; // Reset consecutive error counter
+    }
+    return -1;
+  } else {
+    consecutiveErrors = 0; // Reset consecutive error counter if successful
+  }
+
+  p = finger.image2Tz();
+  if (p != FINGERPRINT_OK) {
+    Serial.println("Error converting image.");
+    return -1;
+  }
+
+  p = finger.fingerFastSearch();
+  if (p != FINGERPRINT_OK) {
+    Serial.println("Fingerprint not found.");
+    return -1;
+  }
+
+  // Fingerprint found!
+  return finger.fingerID;
+}
+
+void unlockDoor() {
+  myServo.write(90); // Move the servo to 0 degrees (unlock position)
+}
+
+void lockDoor() {
+  myServo.write(0); // Move the servo back to 90 degrees (lock position)
+}
